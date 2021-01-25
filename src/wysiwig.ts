@@ -35,7 +35,7 @@ export class Editor {
         [boldText]: false,
         [italicText]: false,
         style: null,
-    }
+    };
 
     constructor(options: EditorOptions) {
         this.editor = document.querySelector(options?.editor ?? '.editor');
@@ -69,10 +69,10 @@ export class Editor {
                         this.btn_italic.classList[action]('active');
                     }
                 }
-                                
+
                 return Reflect.set(t, p, v, r);
-            }
-        })
+            },
+        });
     }
 
     init() {
@@ -90,32 +90,39 @@ export class Editor {
                 const span = this.textarea.lastElementChild.querySelector('span');
                 this.moveCaretTo(span);
             }
-        })
+        });
 
         // предотвращает удаление первого параграфа и спана внутри
         this.textarea.addEventListener('keydown', function (e) {
-            if (this.innerText.length <= 1) {
+            if (this.innerText === '\u200b') {
                 if (e.code === 'Backspace') {
                     e.preventDefault();
                 }
             }
         });
 
-        this.textarea.addEventListener('cut', function(e) {
+        this.textarea.addEventListener('blur', () => {
+            if (this.textarea.innerText === '\u200b') {
+                this.textarea.innerHTML = '';
+            }
+        });
+
+        this.textarea.addEventListener('cut', function (e) {
             if (this.innerText.length <= 1) {
                 // TODO: предотвратить удаление параграфа
             }
-        })
+        });
 
         this.textarea.addEventListener('paste', (e) => {
             // TODO: вставка форматированного текста
+            console.log(e.clipboardData.types);
             if (e.clipboardData.types.includes('text/plain')) {
-                // console.log(e.clipboardData.getData('text/plain'))
+                console.log(e.clipboardData.getData('text/plain'));
             }
             if (e.clipboardData.types.includes('text/html')) {
-                // console.log(e.clipboardData.getData('text/html'))
+                console.log(e.clipboardData.getData('text/html'));
             }
-        })
+        });
     }
 
     addParagraph = () => {
@@ -125,9 +132,9 @@ export class Editor {
         div.appendChild(span);
         div.classList.add('paragraph');
         this.textarea.appendChild(div);
-    }
+    };
 
-    moveCaretTo(node: HTMLSpanElement):void {
+    moveCaretTo(node: HTMLSpanElement): void {
         const range = document.createRange();
         range.selectNodeContents(node);
         range.collapse(true);
@@ -138,19 +145,23 @@ export class Editor {
 
     select = () => {
         const selection = document.getSelection();
-        if (selection.isCollapsed) {
-            const span = selection.anchorNode.parentElement;
-            // выделение кнопок
-            this.toolbar[boldText] = span.classList.contains(boldText);
-            this.toolbar[italicText] = span.classList.contains(italicText);
-            this.toolbar.style = span.classList.contains(h1Text) ? h1Text : span.classList.contains(h2Text) ? h2Text : null;
 
-            if (this.selection) {
-                this.selection = null;
-            }
-        } else {
-            if (this.textarea.contains(selection.anchorNode)) {
+        if (this.textarea.contains(selection.anchorNode)) {
+            if (selection.isCollapsed) {
+                const span = selection.anchorNode.parentElement;
+                // выделение кнопок
+                this.toolbar[boldText] = span.classList.contains(boldText);
+                this.toolbar[italicText] = span.classList.contains(italicText);
+                this.toolbar.style = span.classList.contains(h1Text)
+                    ? h1Text
+                    : span.classList.contains(h2Text)
+                    ? h2Text
+                    : null;
 
+                if (this.selection) {
+                    this.selection = null;
+                }
+            } else {
                 this.selection = selection;
 
                 const container = selection.getRangeAt(0).commonAncestorContainer;
@@ -160,32 +171,43 @@ export class Editor {
                     const span = container.parentElement;
                     this.toolbar[boldText] = span.classList.contains(boldText);
                     this.toolbar[italicText] = span.classList.contains(italicText);
-                    this.toolbar.style = span.classList.contains(h1Text) ? h1Text : span.classList.contains(h2Text) ? h2Text : null;
+                    this.toolbar.style = span.classList.contains(h1Text)
+                        ? h1Text
+                        : span.classList.contains(h2Text)
+                        ? h2Text
+                        : null;
                 } else if (container.nodeName === 'SPAN') {
                     this.toolbar[boldText] = (container as HTMLElement).classList.contains(boldText);
                     this.toolbar[italicText] = (container as HTMLElement).classList.contains(italicText);
-                    this.toolbar.style = (container as HTMLElement).classList.contains(h1Text) ? h1Text : (container as HTMLElement).classList.contains(h2Text) ? h2Text : null;
+                    this.toolbar.style = (container as HTMLElement).classList.contains(h1Text)
+                        ? h1Text
+                        : (container as HTMLElement).classList.contains(h2Text)
+                        ? h2Text
+                        : null;
                 } else {
                     const fr = this.selection.getRangeAt(0).cloneContents();
                     const spans = fr.querySelectorAll('span');
                     const spansAr = Array.from(spans);
 
-                    this.toolbar[boldText] = spansAr.every(span => (span as HTMLElement).classList.contains(boldText));
-                    this.toolbar[italicText] = spansAr.every(span => (span as HTMLElement).classList.contains(italicText));
-                    this.toolbar.style = spansAr.every(span => (span as HTMLElement).classList.contains(h1Text)) 
-                                            ? h1Text 
-                                            : spansAr.every(span => (span as HTMLElement).classList.contains(h2Text))
-                                                ? h2Text
-                                                : null;
-                }
-
-            } else {
-                if (this.selection) {
-                    this.selection = null;
+                    this.toolbar[boldText] = spansAr.every((span) =>
+                        (span as HTMLElement).classList.contains(boldText)
+                    );
+                    this.toolbar[italicText] = spansAr.every((span) =>
+                        (span as HTMLElement).classList.contains(italicText)
+                    );
+                    this.toolbar.style = spansAr.every((span) => (span as HTMLElement).classList.contains(h1Text))
+                        ? h1Text
+                        : spansAr.every((span) => (span as HTMLElement).classList.contains(h2Text))
+                        ? h2Text
+                        : null;
                 }
             }
+        } else {
+            if (this.selection) {
+                this.selection = null;
+            }
         }
-    }
+    };
 
     applyModifier = (mod: TextModifier) => () => {
         const spans = this.processSelection();
@@ -198,7 +220,7 @@ export class Editor {
             spans.forEach((span) => span.classList.add(mod));
             this.toolbar[mod] = true;
         }
-    }
+    };
 
     makeBold = this.applyModifier(boldText);
     makeItalic = this.applyModifier(italicText);
@@ -206,28 +228,28 @@ export class Editor {
     applyStyle = (style: TextStyle) => () => {
         const spans = this.processSelection();
         const isStyled = spans.every((span) => span.classList.contains(style));
-        const filteredStyles = styles.filter(s => s !== style);
-        
+        const filteredStyles = styles.filter((s) => s !== style);
+
         if (isStyled) {
-            spans.forEach(span => span.classList.toggle(style));
+            spans.forEach((span) => span.classList.toggle(style));
             this.toolbar.style = null;
         } else {
-            spans.forEach(span => {
-                filteredStyles.forEach(fStyle => span.classList.remove(fStyle));
+            spans.forEach((span) => {
+                filteredStyles.forEach((fStyle) => span.classList.remove(fStyle));
                 span.classList.add(style);
                 this.toolbar.style = style;
-            })
+            });
         }
-    }
+    };
 
     applyH1 = this.applyStyle(h1Text);
     applyH2 = this.applyStyle(h2Text);
-    
+
     processSelection(): HTMLElement[] {
         const selection = this.selection;
         const range: Range = selection.getRangeAt(0);
         const output: HTMLElement[] = [];
-        
+
         if (range.startContainer === range.endContainer) {
             // выделение внутри одного узла
             if (range.startContainer.nodeType === 3) {
@@ -261,7 +283,7 @@ export class Editor {
             // wrap должен быть либо .paragraph либо textarea;
             // FIXME hardcode
             if (wrap.classList.contains('paragraph')) {
-                output.push(...getSpans(wrap, range))
+                output.push(...getSpans(wrap, range));
             }
 
             // FIXME hardcode
@@ -348,7 +370,7 @@ function splitSpan(span: HTMLElement, startOffset: number, endOffset: number): H
         lSpan.firstChild.remove();
     }
 
-    const spans = [fSpan, mSpan, lSpan].filter(span => typeof span !== 'undefined');
+    const spans = [fSpan, mSpan, lSpan].filter((span) => typeof span !== 'undefined');
     span.replaceWith(...spans);
 
     return mSpan;
@@ -374,7 +396,7 @@ function getSpans(wrap: HTMLElement, range: Range): HTMLElement[] {
         }
         output.push(startSpan);
     }
-    
+
     if (wrap.contains(endContainer)) {
         if (endContainer.nodeType === 3) {
             endSpan = splitSpan(endContainer.parentElement, 0, range.endOffset);
@@ -391,7 +413,7 @@ function getSpans(wrap: HTMLElement, range: Range): HTMLElement[] {
     let next = (startSpan ? startSpan.nextElementSibling : wrap.firstElementChild) as HTMLElement;
 
     while (next && next !== endSpan) {
-        output.push(next)
+        output.push(next);
         next = next.nextElementSibling as HTMLElement;
     }
 
