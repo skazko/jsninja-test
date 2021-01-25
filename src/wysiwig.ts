@@ -31,6 +31,7 @@ export class Editor {
     public btn_italic: HTMLElement;
     public selection: any;
     public toolbar: Toolbar;
+    public textdelete: CustomEvent;
     private _toolbar: Toolbar = {
         [boldText]: false,
         [italicText]: false,
@@ -45,6 +46,7 @@ export class Editor {
         this.btn_bold = this.editor.querySelector(options?.btn_bold ?? 'btn_bold');
         this.btn_italic = this.editor.querySelector(options?.btn_italic ?? 'btn_italic');
         this.selection = null;
+        this.textdelete = new CustomEvent('textdelete');
         this.toolbar = new Proxy(this._toolbar, {
             set: (t, p, v, r) => {
                 if (p === 'style') {
@@ -84,6 +86,7 @@ export class Editor {
         this.btn_h2.addEventListener('click', this.applyH2);
 
         document.addEventListener('selectionchange', this.select);
+        this.addPStyle();
         this.textarea.addEventListener('focus', () => {
             if (this.textarea.children.length === 0) {
                 this.addParagraph();
@@ -92,37 +95,99 @@ export class Editor {
             }
         });
 
+        this.textarea.addEventListener('textdelete', () => {
+            setTimeout(() => {
+                if (this.textarea.innerText == "\n" || this.textarea.innerText === "") {
+                    this.textarea.innerHTML = '';
+                    this.addParagraph();
+                } else {
+                    const pars = this.textarea.querySelectorAll('.' + Array.from(this.textarea.classList).join('.') + ' .paragraph');
+                    pars.forEach(this.wrapText);
+                }
+            }, 0)
+        })
+
         // предотвращает удаление первого параграфа и спана внутри
-        this.textarea.addEventListener('keydown', function (e) {
-            if (this.innerText === '\u200b') {
+        this.textarea.addEventListener('keydown', (e) => {
+            if (this.textarea.innerText === '\u200b' || this.textarea.innerText.length === 0) {
                 if (e.code === 'Backspace') {
                     e.preventDefault();
                 }
             }
+
+            if (e.code === 'Backspace' || e.code === 'Delete') {
+                if (this.selection) {
+                    this.textarea.dispatchEvent(this.textdelete);
+                }
+            }
+        });
+
+        this.textarea.addEventListener('keyup', (e) => {
+            if (e.code === 'Backspace' || e.code === 'Delete') {
+                const pars = this.textarea.querySelectorAll('.paragraph');
+                pars.forEach(p => {
+                    if (!p.querySelector('span')) {
+                        // FIXME подумать как сделать чтобы сохранять курсор 
+                        this.textarea.dispatchEvent(new CustomEvent('emptyparagraph', {detail: {p} }));
+                    }
+                })
+            }
+            
+        })
+
+        this.textarea.addEventListener('emptyparagraph', (e: any) => {
+            e.detail.p.remove()
         });
 
         this.textarea.addEventListener('blur', () => {
-            if (this.textarea.innerText === '\u200b') {
+            if (this.textarea.innerText === '\u200b' || this.textarea.innerText === "") {
                 this.textarea.innerHTML = '';
             }
         });
 
-        this.textarea.addEventListener('cut', function (e) {
-            if (this.innerText.length <= 1) {
-                // TODO: предотвратить удаление параграфа
-            }
+        this.textarea.addEventListener('cut', (e) => {
+            this.applyStylesToParagraphs();
+            setTimeout(() => {
+                this.textarea.dispatchEvent(this.textdelete);
+            }, 0)
+            
         });
 
         this.textarea.addEventListener('paste', (e) => {
-            // TODO: вставка форматированного текста
-            console.log(e.clipboardData.types);
-            if (e.clipboardData.types.includes('text/plain')) {
-                console.log(e.clipboardData.getData('text/plain'));
-            }
-            if (e.clipboardData.types.includes('text/html')) {
-                console.log(e.clipboardData.getData('text/html'));
-            }
+            console.log(e.clipboardData.getData('text/html'))
+            setTimeout(() => {
+                const pars = this.textarea.querySelectorAll('.' + Array.from(this.textarea.classList).join('.') + ' .paragraph');
+                pars.forEach(this.upParagraphs);
+                pars.forEach(this.wrapText);
+                pars.forEach(par => {
+                    if (par.textContent.length === 0) {
+                        par.remove();
+                    }
+                })
+            }, 50);
         });
+
+        this.textarea.addEventListener('copy', (e) => {
+            this.applyStylesToParagraphs();
+        })
+    }
+
+    upParagraphs = (par) => {
+        let last = par;
+        par.querySelectorAll('.paragraph').forEach(p => {
+            console.log(p)
+            last.after(p);
+            last = p
+        })
+    }
+    wrapText = (par) => {
+        par.childNodes.forEach(n => {
+            if (n.nodeType === 3) {
+                const span = document.createElement('span');
+                span.innerText = n.textContent;
+                n.replaceWith(span);
+            }
+        })
     }
 
     addParagraph = () => {
@@ -133,6 +198,12 @@ export class Editor {
         div.classList.add('paragraph');
         this.textarea.appendChild(div);
     };
+
+    addPStyle() {
+        const style = document.createElement('style');
+        style.innerHTML = '.paragraph {font-size: 1rem;}';
+        document.head.append(style);
+    }
 
     moveCaretTo(node: HTMLSpanElement): void {
         const range = document.createRange();
@@ -145,18 +216,25 @@ export class Editor {
 
     select = () => {
         const selection = document.getSelection();
-
+        // console.log(selection)
         if (this.textarea.contains(selection.anchorNode)) {
             if (selection.isCollapsed) {
                 const span = selection.anchorNode.parentElement;
-                // выделение кнопок
-                this.toolbar[boldText] = span.classList.contains(boldText);
-                this.toolbar[italicText] = span.classList.contains(italicText);
-                this.toolbar.style = span.classList.contains(h1Text)
-                    ? h1Text
-                    : span.classList.contains(h2Text)
-                    ? h2Text
-                    : null;
+
+                if (span && span.nodeName === 'SPAN') {
+                    // выделение кнопок
+                    this.toolbar[boldText] = span.classList.contains(boldText);
+                    this.toolbar[italicText] = span.classList.contains(italicText);
+
+                    const p = span.closest('.paragraph');
+
+                    this.toolbar.style = p.classList.contains(h1Text)
+                        ? h1Text
+                        : p.classList.contains(h2Text)
+                        ? h2Text
+                        : null;
+                }
+                
 
                 if (this.selection) {
                     this.selection = null;
@@ -171,17 +249,24 @@ export class Editor {
                     const span = container.parentElement;
                     this.toolbar[boldText] = span.classList.contains(boldText);
                     this.toolbar[italicText] = span.classList.contains(italicText);
-                    this.toolbar.style = span.classList.contains(h1Text)
+
+                    const p = span.closest('.paragraph');
+                    
+                    this.toolbar.style = p.classList.contains(h1Text)
                         ? h1Text
-                        : span.classList.contains(h2Text)
+                        : p.classList.contains(h2Text)
                         ? h2Text
                         : null;
+
                 } else if (container.nodeName === 'SPAN') {
                     this.toolbar[boldText] = (container as HTMLElement).classList.contains(boldText);
                     this.toolbar[italicText] = (container as HTMLElement).classList.contains(italicText);
-                    this.toolbar.style = (container as HTMLElement).classList.contains(h1Text)
+                    
+                    const p = (container as HTMLElement).closest('.paragraph');
+
+                    this.toolbar.style = p.classList.contains(h1Text)
                         ? h1Text
-                        : (container as HTMLElement).classList.contains(h2Text)
+                        : p.classList.contains(h2Text)
                         ? h2Text
                         : null;
                 } else {
@@ -189,17 +274,35 @@ export class Editor {
                     const spans = fr.querySelectorAll('span');
                     const spansAr = Array.from(spans);
 
-                    this.toolbar[boldText] = spansAr.every((span) =>
+                    this.toolbar[boldText] = spansAr.length > 0 && spansAr.every((span) =>
                         (span as HTMLElement).classList.contains(boldText)
                     );
-                    this.toolbar[italicText] = spansAr.every((span) =>
+                    this.toolbar[italicText] = spansAr.length > 0 && spansAr.every((span) =>
                         (span as HTMLElement).classList.contains(italicText)
                     );
-                    this.toolbar.style = spansAr.every((span) => (span as HTMLElement).classList.contains(h1Text))
-                        ? h1Text
-                        : spansAr.every((span) => (span as HTMLElement).classList.contains(h2Text))
-                        ? h2Text
-                        : null;
+
+                    if ((container as HTMLElement).classList.contains('paragraph')) {
+                        const p = container as HTMLElement;
+
+                        this.toolbar.style = p.classList.contains(h1Text)
+                            ? h1Text
+                            : p.classList.contains(h2Text)
+                            ? h2Text
+                            : null;
+                    } else {
+                        const paragraphs = new Set<HTMLElement>();
+                        spans.forEach(span => {
+                            paragraphs.add(span.closest('.paragraph'))
+                        });
+
+                        const ar = Array.from(paragraphs);
+
+                        this.toolbar.style = ar.every((p) => p.classList.contains(h1Text))
+                            ? h1Text
+                            : ar.every((p) => p.classList.contains(h2Text))
+                            ? h2Text
+                            : null;
+                    }
                 }
             }
         } else {
@@ -227,16 +330,49 @@ export class Editor {
 
     applyStyle = (style: TextStyle) => () => {
         const spans = this.processSelection();
-        const isStyled = spans.every((span) => span.classList.contains(style));
+
+        if (spans[0] !== spans[0].closest('.paragraph').firstElementChild) {
+            const parToSplit = spans[0].closest('.paragraph');
+            const newPar = document.createElement('div');
+            newPar.classList.add('paragraph')
+            parToSplit.after(newPar);
+            parToSplit.childNodes.forEach(ch => {
+                if (spans.includes(ch as HTMLElement)) {
+                    newPar.append(ch);
+                }
+            });
+        }
+
+        if (spans[spans.length - 1] !== spans[spans.length - 1].closest('.paragraph').lastElementChild) {
+            const parToSplit = spans[spans.length - 1].closest('.paragraph');
+            const newPar = document.createElement('div');
+            newPar.classList.add('paragraph')
+            parToSplit.before(newPar);
+            parToSplit.childNodes.forEach(ch => {
+                if (spans.includes(ch as HTMLElement)) {
+                    newPar.append(ch);
+                }
+            });
+        }
+
+
+        const paragraphs = new Set<HTMLElement>();
+        spans.forEach(span => {
+            paragraphs.add(span.closest('.paragraph'))
+        });
+
+        const ar = Array.from(paragraphs);
+
+        const isStyled = ar.every((p) => p.classList.contains(style));
         const filteredStyles = styles.filter((s) => s !== style);
 
         if (isStyled) {
-            spans.forEach((span) => span.classList.toggle(style));
+            ar.forEach((p) => p.classList.toggle(style));
             this.toolbar.style = null;
         } else {
-            spans.forEach((span) => {
-                filteredStyles.forEach((fStyle) => span.classList.remove(fStyle));
-                span.classList.add(style);
+            ar.forEach((p) => {
+                filteredStyles.forEach((fStyle) => p.classList.remove(fStyle));
+                p.classList.add(style);
                 this.toolbar.style = style;
             });
         }
@@ -257,7 +393,7 @@ export class Editor {
                 if (range.startOffset === 0 && range.endOffset === (range.endContainer as Text).length) {
                     // выделен весь узел полностью
                     // все текстовые узлы должны быть в спанах
-                    const span = range.startContainer.parentElement;
+                    let span = range.startContainer.parentElement;
                     output.push(span);
                 } else {
                     // узел выделен не полностью разбить на спаны
@@ -343,6 +479,17 @@ export class Editor {
 
         return output;
     }
+
+    applyStylesToParagraphs() {
+        document.querySelectorAll('.paragraph').forEach(p => {
+            const computedProps = getComputedStyle(p);
+
+            getAppliedStyleProps(p as HTMLElement).forEach(prop => {
+                (p as HTMLElement).style[prop] = computedProps[prop];
+            });
+            
+        })
+    }
 }
 
 function splitSpan(span: HTMLElement, startOffset: number, endOffset: number): HTMLElement {
@@ -370,7 +517,9 @@ function splitSpan(span: HTMLElement, startOffset: number, endOffset: number): H
         lSpan.firstChild.remove();
     }
 
-    const spans = [fSpan, mSpan, lSpan].filter((span) => typeof span !== 'undefined');
+    const spans = [fSpan, mSpan, lSpan].filter((span) => {
+        return typeof span !== 'undefined' && span.textContent !== "\n" && span.textContent !== "\u200b"
+    });
     span.replaceWith(...spans);
 
     return mSpan;
@@ -422,4 +571,22 @@ function getSpans(wrap: HTMLElement, range: Range): HTMLElement[] {
     }
 
     return output;
+}
+
+function getAppliedStyleProps(el: HTMLElement): Array<string> {
+    const appliedRules = new Set<string>();
+    for (let i = 0; i < document.styleSheets.length; i++) {
+        const rules = document.styleSheets[i].cssRules;
+        for (let j = 0; j < rules.length; j++) {
+            const rule = rules[j] as CSSStyleRule;
+            if (el.matches(rule.selectorText)) {
+                for (let k = 0; k < rule.style.length; k++) {
+                    const styleProp = rule.style[k];
+                    appliedRules.add(styleProp);
+                }
+                
+            }
+        }
+    }
+    return Array.from(appliedRules);
 }
