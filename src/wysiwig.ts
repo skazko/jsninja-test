@@ -327,27 +327,13 @@ export class Editor {
         const spans = this.processSelection();
 
         if (spans[0] !== spans[0].closest('.paragraph').firstElementChild) {
-            const parToSplit = spans[0].closest('.paragraph');
-            const newPar = document.createElement('div');
-            newPar.classList.add('paragraph')
-            parToSplit.after(newPar);
-            parToSplit.childNodes.forEach(ch => {
-                if (spans.includes(ch as HTMLElement)) {
-                    newPar.append(ch);
-                }
-            });
+            const parToSplit = spans[0].closest('.paragraph') as HTMLDivElement;
+            parToSplit.after(splitParagraph(parToSplit, spans));
         }
 
         if (spans[spans.length - 1] !== spans[spans.length - 1].closest('.paragraph').lastElementChild) {
-            const parToSplit = spans[spans.length - 1].closest('.paragraph');
-            const newPar = document.createElement('div');
-            newPar.classList.add('paragraph')
-            parToSplit.before(newPar);
-            parToSplit.childNodes.forEach(ch => {
-                if (spans.includes(ch as HTMLElement)) {
-                    newPar.append(ch);
-                }
-            });
+            const parToSplit = spans[spans.length - 1].closest('.paragraph') as HTMLDivElement;
+            parToSplit.before(splitParagraph(parToSplit, spans));
         }
 
 
@@ -584,4 +570,21 @@ function getAppliedStyleProps(el: HTMLElement): Array<string> {
         }
     }
     return Array.from(appliedRules);
+}
+
+function splitParagraph(par: HTMLElement, spans: HTMLElement[]): HTMLDivElement {
+    const newPar = document.createElement('div');
+    newPar.classList.add('paragraph');
+
+    let next = par.firstChild;
+    while (next) {
+        if (spans.includes(next as HTMLElement)) {
+            newPar.append(next);
+            next = par.firstChild;
+        } else {
+            next = next.nextSibling;
+        }
+    }
+
+    return newPar;
 }
