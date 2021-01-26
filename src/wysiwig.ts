@@ -159,11 +159,6 @@ export class Editor {
                 const pars = this.textarea.querySelectorAll('.' + Array.from(this.textarea.classList).join('.') + ' .paragraph');
                 pars.forEach(this.upParagraphs);
                 pars.forEach(this.wrapText);
-                pars.forEach(par => {
-                    if (par.textContent.length === 0) {
-                        par.remove();
-                    }
-                })
             }, 50);
         });
 
